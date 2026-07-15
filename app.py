@@ -16,16 +16,19 @@ def conectar_sheets():
 
 sheet = conectar_sheets()
 
-@st.cache_data(ttl=10) # Se actualiza solo cada 10 seg
+@st.cache_data(ttl=2)
 def cargar_datos():
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
     if not df.empty:
-        # Forzar orden de columnas por si están cambiadas
         df = df[['Fecha', 'Categoria', 'Descripcion', 'Monto']]
+        
         df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', dayfirst=True)
+        mask = df['Fecha'].isna()
+        df.loc[mask, 'Fecha'] = pd.to_datetime(df.loc[mask, 'Fecha'], errors='coerce', format='%Y-%m-%d')
+        
         df['Monto'] = pd.to_numeric(df['Monto'], errors='coerce')
-        df = df.dropna(subset=['Fecha', 'Monto']) # Elimina filas malas
+        df = df.dropna(subset=['Fecha', 'Monto'])
         df['ID'] = df.index + 2
     return df
 
@@ -42,11 +45,8 @@ st.title("💰 Dashboard de Gastos")
 tab1, tab2 = st.tabs(["📊 Ver Gastos", "➕ Agregar Gasto"])
 df = cargar_datos()
 
-# Estado para saber qué fila estamos editando
 if 'editando_id' not in st.session_state:
     st.session_state.editando_id = None
-if 'df_filtrado' not in st.session_state:
-    st.session_state.df_filtrado = df
 
 with tab2:
     st.subheader("Registrar nuevo gasto")
@@ -64,7 +64,6 @@ with tab2:
                 guardar_gasto(fecha, categoria, descripcion, monto)
                 st.success("Guardado!")
                 st.cache_data.clear()
-                st.session_state.df_filtrado = cargar_datos() # Actualiza tabla
                 st.rerun()
 
 with tab1:
@@ -72,16 +71,15 @@ with tab1:
     if df.empty:
         st.info("Aún no hay gastos")
     else:
-        # FILTROS CON BOTONES
         st.markdown("### Filtros")
         col1, col2, col3 = st.columns(3)
-        with col1:
+        with col1: 
             filtro_cat = st.selectbox("Categoría", ["Todas"] + df['Categoria'].unique().tolist())
-        with col2:
-            fecha_inicio = st.date_input("Desde", df['Fecha'].min())
-        with col3:
+        with col2: 
+            fecha_inicio = st.date_input("Desde", df['Fecha'].min()) 
+        with col3: 
             fecha_fin = st.date_input("Hasta", df['Fecha'].max())
-
+        
         buscador = st.text_input("🔍 Buscar en descripción")
 
         col1, col2, col3 = st.columns([1,1,2])
@@ -89,53 +87,43 @@ with tab1:
         limpiar_btn = col2.button("Limpiar Filtros", use_container_width=True)
         refrescar_btn = col3.button("🔄 Refrescar datos", use_container_width=True)
 
-        # LÓGICA DE BOTONES
+      
+        df_filtrado = df.copy()
         if buscar_btn:
-            df_filtrado = df.copy()
-            if filtro_cat!= "Todas":
+            if filtro_cat!= "Todas": 
                 df_filtrado = df_filtrado[df_filtrado['Categoria'] == filtro_cat]
-            df_filtrado = df_filtrado[(df_filtrado['Fecha'] >= pd.to_datetime(fecha_inicio)) &
+            df_filtrado = df_filtrado[(df_filtrado['Fecha'] >= pd.to_datetime(fecha_inicio)) & 
                                       (df_filtrado['Fecha'] <= pd.to_datetime(fecha_fin))]
-            if buscador:
+            if buscador: 
                 df_filtrado = df_filtrado[df_filtrado['Descripcion'].str.contains(buscador, case=False, na=False)]
-            st.session_state.df_filtrado = df_filtrado
-
+        
         if limpiar_btn:
-            st.session_state.df_filtrado = df
+            st.rerun()
 
         if refrescar_btn:
             st.cache_data.clear()
-            st.session_state.df_filtrado = cargar_datos()
             st.rerun()
 
-        df_filtrado = st.session_state.df_filtrado
-
         st.metric("Total Filtrado", f"${df_filtrado['Monto'].sum():,.2f}")
-
-        # TABLA CON EDITAR Y BORRAR
+        
         for i, row in df_filtrado.sort_values("Fecha", ascending=False).iterrows():
-            col1, col2, col3, col4, col5, col6 = st.columns([2,2,3,2,1,1])
+            col1, col2, col3, col4, col5, col6 = st.columns([2][2][3][2][1][1])
             col1.write(row['Fecha'].strftime("%Y-%m-%d"))
             col2.write(row['Categoria'])
             col3.write(row['Descripcion'])
             col4.write(f"${row['Monto']:,.2f}")
-
             if col5.button("✏️", key=f"edit_{row['ID']}"):
                 st.session_state.editando_id = row['ID']
                 st.rerun()
-
             if col6.button("🗑️", key=f"del_{row['ID']}"):
                 borrar_gasto(int(row['ID']))
                 st.cache_data.clear()
-                st.session_state.df_filtrado = cargar_datos()
                 st.rerun()
 
-        # FORMULARIO DE EDICION
         if st.session_state.editando_id:
             st.markdown("---")
             st.subheader("Editando gasto")
             fila = df[df['ID'] == st.session_state.editando_id].iloc[0]
-
             with st.form("form_editar"):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -144,13 +132,11 @@ with tab1:
                 with col2:
                     new_monto = st.number_input("Monto", value=float(fila['Monto']), format="%.2f")
                     new_descripcion = st.text_input("Descripción", fila['Descripcion'])
-
                 col1, col2 = st.columns(2)
                 if col1.form_submit_button("Guardar Cambios"):
                     actualizar_gasto(int(st.session_state.editando_id), new_fecha, new_categoria, new_descripcion, new_monto)
                     st.session_state.editando_id = None
                     st.cache_data.clear()
-                    st.session_state.df_filtrado = cargar_datos()
                     st.success("Actualizado!")
                     st.rerun()
                 if col2.form_submit_button("Cancelar"):
