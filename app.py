@@ -8,6 +8,27 @@ st.title("💰 Análisis de Gastos")
 df = pd.read_csv("gastos.csv")
 df['Fecha'] = pd.to_datetime(df['Fecha'])
 
+st.header("➕ Agregar Nuevo Gasto")
+
+with st.form("form_gasto"):
+    col1, col2 = st.columns(2)
+    with col1:
+        fecha = st.date_input("Fecha")
+        categoria = st.selectbox("Categoria", df['Categoria'].unique())
+    with col2:
+        monto = st.number_input("Monto", min_value=0)
+        descripcion = st.text_input("Descripción")
+    
+    submitted = st.form_submit_button("Guardar Gasto")
+    if submitted:
+        nuevo_gasto = pd.DataFrame([[fecha, categoria, monto, descripcion]], columns=df.columns)
+        df = pd.concat([df, nuevo_gasto], ignore_index=True)
+        df.to_csv("gastos.csv", index=False)
+        st.success("Gasto agregado!")
+        st.rerun()
+
+st.divider()
+
 # FILTROS
 st.sidebar.header("Filtros")
 
