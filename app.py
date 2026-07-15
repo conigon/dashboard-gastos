@@ -1,84 +1,62 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import datetime
 
-st.set_page_config(page_title="Análisis de Gastos", layout="wide")
-st.title("💰 Análisis de Gastos")
+# Configuración
+st.set_page_config(page_title="Dashboard Gastos", layout="wide")
+st.title("💰 Dashboard de Gastos Personales")
 
-df = pd.read_csv("gastos.csv")
-df['Fecha'] = pd.to_datetime(df['Fecha'])
+# Conectar con Google Sheets
+scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+client = gspread.authorize(creds)
 
-st.header("➕ Agregar Nuevo Gasto")
+# Abre tu Sheet. Cambia el nombre si tu Sheet se llama distinto
+SHEET_NAME = "DB_Gastos" 
+sheet = client.open(SHEET_NAME).sheet1
 
-with st.form("form_gasto"):
+# Función para cargar datos
+@st.cache_data(ttl=60)
+def cargar_datos():
+    data = sheet.get_all_records()
+    df = pd.DataFrame(data)
+    if not df.empty:
+        df['Fecha'] = pd.to_datetime(df['Fecha'])
+        df['Monto'] = pd.to_numeric(df['Monto'])
+    return df
+
+df = cargar_datos()
+
+# FORMULARIO PARA AGREGAR GASTOS
+st.subheader("Agregar nuevo gasto")
+with st.form("nuevo_gasto"):
     col1, col2 = st.columns(2)
     with col1:
-        fecha = st.date_input("Fecha")
-        categoria = st.selectbox("Categoria", df['Categoria'].unique())
+        fecha = st.date_input("Fecha", datetime.now())
+        categoria = st.selectbox("Categoria", ["Comida", "Transporte", "Supermercado", "Casa", "Ocio", "Salud", "Otros"])
     with col2:
-        monto = st.number_input("Monto", min_value=0)
-        descripcion = st.text_input("Descripción")
+        monto = st.number_input("Monto", min_value=0, step=1000)
+        descripcion = st.text_input("Descripcion")
     
     submitted = st.form_submit_button("Guardar Gasto")
     if submitted:
-        nuevo_gasto = pd.DataFrame([[fecha, categoria, monto, descripcion]], columns=df.columns)
-        df = pd.concat([df, nuevo_gasto], ignore_index=True)
-        df.to_csv("gastos.csv", index=False)
-        st.success("Gasto agregado!")
+        nueva_fila = [str(fecha), categoria, monto, descripcion]
+        sheet.append_row(nueva_fila)
+        st.success("Gasto guardado!")
+        st.cache_data.clear() # Recarga los datos
         st.rerun()
 
-st.divider()
-
-# FILTROS
-st.sidebar.header("Filtros")
-
-# NUEVO: Toggle para elegir Mes vs Todos los meses
-modo = st.sidebar.radio("Ver:", ["Mes Específico", "Todos los Meses Acumulado"])
-
-categorias = st.sidebar.multiselect(
-    "Selecciona Categoría",
-    options=df["Categoria"].unique(),
-    default=df["Categoria"].unique()
-)
-
-# LÓGICA DE FILTRO
-if modo == "Mes Específico":
-    meses = st.sidebar.selectbox(
-        "Selecciona Mes", 
-        options=df["Fecha"].dt.strftime('%Y-%m').unique()
-    )
-    df_filtrado = df[
-        (df["Fecha"].dt.strftime('%Y-%m') == meses) & 
-        (df["Categoria"].isin(categorias))
-    ]
-    titulo_kpi = f"Gasto Total {meses}"
+# MOSTRAR DATOS Y GRAFICO
+st.subheader("Tus Gastos")
+if not df.empty:
+    st.dataframe(df, use_container_width=True)
+    
+    st.subheader("Gastos por Categoria")
+    gastos_cat = df.groupby("Categoria")["Monto"].sum()
+    st.bar_chart(gastos_cat)
+    
+    st.metric("Total Gastado", f"${df['Monto'].sum():,.0f}")
 else:
-    df_filtrado = df[df["Categoria"].isin(categorias)]
-    titulo_kpi = "Gasto Total Acumulado"
-
-# KPIs
-col1, col2, col3 = st.columns(3)
-col1.metric(titulo_kpi, f"${df_filtrado['Monto'].sum():,.0f}")
-col2.metric("Promedio por Gasto", f"${df_filtrado['Monto'].mean():,.0f}")
-col3.metric("Nº de Gastos", len(df_filtrado))
-
-# Gráficos
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("Gasto por Categoría")
-    fig1 = px.bar(df_filtrado.groupby('Categoria')['Monto'].sum().reset_index(), 
-                  x='Categoria', y='Monto')
-    st.plotly_chart(fig1, use_container_width=True)
-
-with col2:
-    st.subheader("Distribución %")
-    fig2 = px.pie(df_filtrado, values='Monto', names='Categoria')
-    st.plotly_chart(fig2, use_container_width=True)
-
-# NUEVO: Gráfico de tendencia siempre visible
-st.subheader("Tendencia Mensual")
-tendencia = df[df["Categoria"].isin(categorias)].groupby('Fecha')['Monto'].sum().reset_index()
-fig3 = px.line(tendencia, x='Fecha', y='Monto', markers=True)
-st.plotly_chart(fig3, use_container_width=True)
-
-st.dataframe(df_filtrado)
+    st.info("Aún no hay gastos. Agrega el primero arriba 👆")
