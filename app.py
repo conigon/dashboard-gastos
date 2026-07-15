@@ -21,8 +21,10 @@ def cargar_datos():
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
     if not df.empty:
-        df['Fecha'] = pd.to_datetime(df['Fecha'])
-        df['Monto'] = pd.to_numeric(df['Monto'])
+        # Esto evita que se caiga si hay celdas vacías
+        df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce')
+        df['Monto'] = pd.to_numeric(df['Monto'], errors='coerce')
+        df = df.dropna(subset=['Fecha', 'Monto']) # Borra filas con fecha o monto malo
         df['ID'] = df.index + 2
     return df
 
