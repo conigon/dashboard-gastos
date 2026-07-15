@@ -23,6 +23,7 @@ def cargar_datos():
     if not df.empty:
         df = df[['Fecha', 'Categoria', 'Descripcion', 'Monto']]
         
+        # ARREGLO: Acepta ambos formatos de fecha
         df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce', dayfirst=True)
         mask = df['Fecha'].isna()
         df.loc[mask, 'Fecha'] = pd.to_datetime(df.loc[mask, 'Fecha'], errors='coerce', format='%Y-%m-%d')
@@ -54,7 +55,7 @@ with tab2:
         col1, col2 = st.columns(2)
         with col1:
             fecha = st.date_input("Fecha", datetime.now())
-            categoria = st.selectbox("Categoría", ["Comida", "Transporte", "Casa", "Salud", "Ocio", "Otros"])
+            categoria = st.selectbox("Categoría", ["Comida", "Transporte", "Casa", "Salud", "Ocio", "Arriendo", "Otros"])
         with col2:
             monto = st.number_input("Monto", min_value=0.0, format="%.2f")
             descripcion = st.text_input("Descripción")
@@ -76,7 +77,7 @@ with tab1:
         with col1: 
             filtro_cat = st.selectbox("Categoría", ["Todas"] + df['Categoria'].unique().tolist())
         with col2: 
-            fecha_inicio = st.date_input("Desde", df['Fecha'].min()) 
+            fecha_inicio = st.date_input("Desde", df['Fecha'].min())
         with col3: 
             fecha_fin = st.date_input("Hasta", df['Fecha'].max())
         
@@ -87,7 +88,6 @@ with tab1:
         limpiar_btn = col2.button("Limpiar Filtros", use_container_width=True)
         refrescar_btn = col3.button("🔄 Refrescar datos", use_container_width=True)
 
-      
         df_filtrado = df.copy()
         if buscar_btn:
             if filtro_cat!= "Todas": 
@@ -106,8 +106,9 @@ with tab1:
 
         st.metric("Total Filtrado", f"${df_filtrado['Monto'].sum():,.2f}")
         
+        # ARREGLO: Le faltaba una coma aquí
         for i, row in df_filtrado.sort_values("Fecha", ascending=False).iterrows():
-            col1, col2, col3, col4, col5, col6 = st.columns([2][2][3][2][1][1])
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 3, 2, 1, 1])
             col1.write(row['Fecha'].strftime("%Y-%m-%d"))
             col2.write(row['Categoria'])
             col3.write(row['Descripcion'])
@@ -128,7 +129,7 @@ with tab1:
                 col1, col2 = st.columns(2)
                 with col1:
                     new_fecha = st.date_input("Fecha", fila['Fecha'])
-                    new_categoria = st.selectbox("Categoría", ["Comida", "Transporte", "Casa", "Salud", "Ocio", "Otros"], index=["Comida", "Transporte", "Casa", "Salud", "Ocio", "Otros"].index(fila['Categoria']))
+                    new_categoria = st.selectbox("Categoría", ["Comida", "Transporte", "Casa", "Salud", "Ocio", "Arriendo", "Otros"], index=["Comida", "Transporte", "Casa", "Salud", "Ocio", "Arriendo", "Otros"].index(fila['Categoria']))
                 with col2:
                     new_monto = st.number_input("Monto", value=float(fila['Monto']), format="%.2f")
                     new_descripcion = st.text_input("Descripción", fila['Descripcion'])
